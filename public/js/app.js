@@ -103,22 +103,22 @@ md.renderer.rules.fence = function (tokens, idx, options, env, self) {
   return defaultFenceRenderer(tokens, idx, options, env, self);
 };
 
-// A lone "---" is repurposed as a plain line break instead of CommonMark's
-// thematic break. Longer dash runs ("----") and other thematic-break
-// markers ("***", "___") still render as an actual <hr>.
-md.renderer.rules.hr = function (tokens, idx) {
-  const isLineBreak = tokens[idx].markup.replace(/\s+/g, "") === "---";
-  return isLineBreak ? "<br>\n" : "<hr>\n";
-};
-
-// A "---" line directly under a text line (no blank line in between) is
-// CommonMark's *setext heading* syntax — it turns the line above into an
-// <h2> instead of producing a thematic-break token at all, so the hr
-// override above never even sees it. To make "---" behave as a line break
-// unconditionally, force a blank line above every standalone "---" before
-// handing the source to markdown-it, which guarantees it can only be
-// parsed as a thematic break. Fenced code blocks are left untouched, so
-// "---" inside a ```diff/yaml/etc. example still prints literally.
+// A lone "---" is repurposed as a plain line break. Longer dash runs
+// ("----") and other thematic-break markers ("***", "___") are left alone
+// and still render as an actual <hr>.
+//
+// Turning it into an isolated <br> between two separate <p> blocks (an
+// earlier version of this) is nearly invisible: two <p>s already get
+// browser-default spacing between them, so the extra <br> barely changes
+// anything visually. Instead, fold "---" into a real *in-paragraph* hard
+// line break using CommonMark's native syntax for one (two trailing spaces
+// before the newline) — that reliably renders as a single visible <br>
+// inside one block, e.g. "Line one<br>Line two" instead of two paragraphs.
+// If "---" isn't attached to a preceding text line (i.e. it's already
+// isolated between blank lines), there's nothing to attach a hard break
+// to, so it's just dropped — the existing blank-line paragraph gap already
+// does the job. Fenced code blocks are left untouched, so "---" inside a
+// ```diff/yaml/etc. example still prints literally.
 function isolateLineBreakMarkers(source) {
   const lines = source.split("\n");
   const out = [];
@@ -138,9 +138,11 @@ function isolateLineBreakMarkers(source) {
     }
 
     if (!inFence && line.trim() === "---") {
-      if (out.length > 0 && out[out.length - 1].trim() !== "") {
-        out.push("");
+      const prevLine = out[out.length - 1];
+      if (prevLine !== undefined && prevLine.trim() !== "") {
+        out[out.length - 1] = prevLine.replace(/\s+$/, "") + "  ";
       }
+      continue;
     }
 
     out.push(line);
