@@ -103,16 +103,51 @@ md.renderer.rules.fence = function (tokens, idx, options, env, self) {
   return defaultFenceRenderer(tokens, idx, options, env, self);
 };
 
-// A lone "---" (or "- - -") on its own line is a thematic break in
-// CommonMark, but here it's repurposed as a plain line break. Longer dash
-// runs ("----") and other thematic-break markers ("***", "___") still
-// render as an actual <hr>. Note this only applies when "---" is preceded
-// by a blank line — "Text\n---" immediately under a paragraph is a setext
-// heading (an <h2>) instead, which is unrelated and untouched.
+// A lone "---" is repurposed as a plain line break instead of CommonMark's
+// thematic break. Longer dash runs ("----") and other thematic-break
+// markers ("***", "___") still render as an actual <hr>.
 md.renderer.rules.hr = function (tokens, idx) {
   const isLineBreak = tokens[idx].markup.replace(/\s+/g, "") === "---";
   return isLineBreak ? "<br>\n" : "<hr>\n";
 };
+
+// A "---" line directly under a text line (no blank line in between) is
+// CommonMark's *setext heading* syntax — it turns the line above into an
+// <h2> instead of producing a thematic-break token at all, so the hr
+// override above never even sees it. To make "---" behave as a line break
+// unconditionally, force a blank line above every standalone "---" before
+// handing the source to markdown-it, which guarantees it can only be
+// parsed as a thematic break. Fenced code blocks are left untouched, so
+// "---" inside a ```diff/yaml/etc. example still prints literally.
+function isolateLineBreakMarkers(source) {
+  const lines = source.split("\n");
+  const out = [];
+  let inFence = false;
+  let fenceChar = "";
+
+  for (const line of lines) {
+    const fenceMatch = line.match(/^\s*(`{3,}|~{3,})/);
+    if (fenceMatch) {
+      const ch = fenceMatch[1][0];
+      if (!inFence) {
+        inFence = true;
+        fenceChar = ch;
+      } else if (ch === fenceChar) {
+        inFence = false;
+      }
+    }
+
+    if (!inFence && line.trim() === "---") {
+      if (out.length > 0 && out[out.length - 1].trim() !== "") {
+        out.push("");
+      }
+    }
+
+    out.push(line);
+  }
+
+  return out.join("\n");
+}
 
 mermaid.initialize({ startOnLoad: false, securityLevel: "loose" });
 
@@ -123,7 +158,7 @@ function scheduleRender() {
 }
 
 async function renderPreview() {
-  preview.innerHTML = md.render(editor.value);
+  preview.innerHTML = md.render(isolateLineBreakMarkers(editor.value));
 
   const diagrams = preview.querySelectorAll(".mermaid");
   if (diagrams.length) {
