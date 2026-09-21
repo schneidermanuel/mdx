@@ -200,7 +200,14 @@ html, body {
   text-align: center;
 }
 
-/* Print / PDF export: show only the rendered document, on plain paper */
+/* Print / PDF export: show only the rendered document, on plain paper.
+   Margins come from @page (repeats on every printed page, unlike element
+   padding) so the exported PDF keeps roughly the same framing the on-screen
+   "paper" card shows, instead of the browser's arbitrary default margin. */
+@page {
+  margin: 1.5cm;
+}
+
 @media print {
   .toolbar,
   .editor-pane,

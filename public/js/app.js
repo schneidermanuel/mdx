@@ -68,6 +68,17 @@ const md = window.markdownit({
   linkify: true,
   typographer: true,
   breaks: false,
+  highlight: function (str, lang) {
+    if (lang && window.hljs && hljs.getLanguage(lang)) {
+      try {
+        const value = hljs.highlight(str, { language: lang, ignoreIllegals: true }).value;
+        return `<pre class="hljs"><code>${value}</code></pre>`;
+      } catch (_) {
+        // fall through to the escaped, unhighlighted block below
+      }
+    }
+    return `<pre class="hljs"><code>${md.utils.escapeHtml(str)}</code></pre>`;
+  },
 });
 
 const defaultFenceRenderer =
@@ -90,6 +101,17 @@ md.renderer.rules.fence = function (tokens, idx, options, env, self) {
   }
 
   return defaultFenceRenderer(tokens, idx, options, env, self);
+};
+
+// A lone "---" (or "- - -") on its own line is a thematic break in
+// CommonMark, but here it's repurposed as a plain line break. Longer dash
+// runs ("----") and other thematic-break markers ("***", "___") still
+// render as an actual <hr>. Note this only applies when "---" is preceded
+// by a blank line — "Text\n---" immediately under a paragraph is a setext
+// heading (an <h2>) instead, which is unrelated and untouched.
+md.renderer.rules.hr = function (tokens, idx) {
+  const isLineBreak = tokens[idx].markup.replace(/\s+/g, "") === "---";
+  return isLineBreak ? "<br>\n" : "<hr>\n";
 };
 
 mermaid.initialize({ startOnLoad: false, securityLevel: "loose" });
