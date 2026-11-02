@@ -182,7 +182,62 @@ async function renderPreview() {
       throwOnError: false,
     });
   }
+
+  fitTables();
 }
+
+// Tables wider than the page: shrink the table's font (and its em-based cell
+// padding) just enough that its narrowest possible layout fits. Only if that
+// still doesn't fit at TABLE_MIN_SCALE do links/code fall back to breaking
+// anywhere (.table-break-code), and as a last resort every cell
+// (.table-break-anywhere), which always fits.
+const TABLE_MIN_SCALE = 0.6;
+// A4 width (210mm) minus 2 × 1.5cm @page margin, in CSS px. Keep in sync
+// with @page in style.css.
+const PRINT_CONTENT_WIDTH_PX = (180 / 25.4) * 96;
+
+function contentWidth(el) {
+  const cs = getComputedStyle(el);
+  return el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+}
+
+function minContentWidth(table) {
+  const previous = table.style.width;
+  table.style.width = "min-content";
+  const width = table.getBoundingClientRect().width;
+  table.style.width = previous;
+  return width;
+}
+
+function fitTables(available = contentWidth(preview)) {
+  if (available <= 0) return; // preview hidden, nothing sensible to measure
+  const fits = (table) => minContentWidth(table) <= available + 0.5;
+
+  for (const table of preview.querySelectorAll("table")) {
+    table.style.fontSize = "";
+    table.classList.remove("table-break-code", "table-break-anywhere");
+
+    // Borders don't scale with the font, so converge in a few steps rather
+    // than trusting a single proportional guess.
+    let scale = 1;
+    for (let i = 0; i < 5 && scale > TABLE_MIN_SCALE && !fits(table); i++) {
+      scale = Math.max(TABLE_MIN_SCALE, scale * (available / minContentWidth(table)) - 0.01);
+      table.style.fontSize = `${scale.toFixed(3)}em`;
+    }
+
+    for (const fallback of ["table-break-code", "table-break-anywhere"]) {
+      if (fits(table)) break;
+      table.classList.add(fallback);
+    }
+  }
+}
+
+// The printed page is narrower than the on-screen paper card, so refit for
+// the print width right before printing and back afterwards.
+window.addEventListener("beforeprint", () => fitTables(PRINT_CONTENT_WIDTH_PX));
+window.addEventListener("afterprint", () => fitTables());
+window.addEventListener("resize", () => fitTables());
+document.fonts?.ready.then(() => fitTables());
 
 editor.addEventListener("input", scheduleRender);
 
@@ -266,6 +321,7 @@ window.addEventListener("mousemove", (event) => {
 });
 
 window.addEventListener("mouseup", () => {
+  if (dragging) fitTables();
   dragging = false;
   document.body.style.cursor = "";
 });

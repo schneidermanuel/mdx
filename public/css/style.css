@@ -189,7 +189,25 @@ html, body {
 .markdown-body th,
 .markdown-body td {
   border: 1px solid var(--paper-border);
-  padding: 6px 10px;
+  /* em-based so padding shrinks together with the font when fitTables()
+     (app.js) scales a too-wide table down. */
+  padding: 0.4em 0.65em;
+  overflow-wrap: break-word;
+}
+
+/* Fallbacks, set by fitTables() when a table still doesn't fit at the
+   minimum font scale. `anywhere` (unlike `break-word`) also lowers the
+   min-content width, so the auto table layout can shrink those columns.
+   Step 1: only the usual culprits (links, inline code) may break anywhere,
+   so ordinary words like "Status" stay intact.
+   Step 2: every cell may break anywhere — always fits. */
+.markdown-body table.table-break-code th a,
+.markdown-body table.table-break-code td a,
+.markdown-body table.table-break-code th code,
+.markdown-body table.table-break-code td code,
+.markdown-body table.table-break-anywhere th,
+.markdown-body table.table-break-anywhere td {
+  overflow-wrap: anywhere;
 }
 
 .markdown-body img,
@@ -206,6 +224,9 @@ html, body {
    padding) so the exported PDF keeps roughly the same framing the on-screen
    "paper" card shows, instead of the browser's arbitrary default margin. */
 @page {
+  /* Fixed paper size so fitTables() (app.js) knows the printable width.
+     Keep PRINT_CONTENT_WIDTH_PX in sync with size and margin. */
+  size: A4;
   margin: 1.5cm;
 
   /* Defining margin boxes replaces the browser's default header/footer
